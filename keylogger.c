@@ -2,7 +2,7 @@
 #include <time.h>
 #include "curl/curl.h"
 
-#define BUFFERLEN 2
+#define BUFFERLEN 1024
 char *buffer;
 unsigned int bufferIndex = 0;
 unsigned int bufferSize = BUFFERLEN;
