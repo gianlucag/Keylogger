@@ -5868,6 +5868,17 @@ unsigned lodepng_encode_file(const char* filename, const unsigned char* image, u
   return error;
 }
 
+
+void lodepng_memory_free(unsigned char *buffer)
+{
+	lodepng_free(buffer);
+}
+
+void lodepng_encode32_memory(const unsigned char* image, unsigned w, unsigned h, unsigned char** imgOut, unsigned int* lenOut)
+{
+  unsigned error = lodepng_encode_memory(imgOut, lenOut, image, w, h, LCT_RGBA, 8);
+}
+
 unsigned lodepng_encode32_file(const char* filename, const unsigned char* image, unsigned w, unsigned h)
 {
   return lodepng_encode_file(filename, image, w, h, LCT_RGBA, 8);

