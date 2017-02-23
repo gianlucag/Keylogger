@@ -1,2 +1,9 @@
 # Keylogger
-Keylogger minimale scritto in C, upload via email
+Minimal keylogger written in C
+
+main features:
+
+ * keystrokes capture
+ * mouse event capture
+ * screenshot capture
+ * remote POST upload
