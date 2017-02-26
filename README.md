@@ -3,7 +3,8 @@ Minimal keylogger written in C
 
 main features:
 
- * keystrokes capture
- * mouse event capture
- * screenshot capture
+ * keystrokes, mouse events capture
+ * screenshot capture as PNG file
  * remote POST upload
+ * PHP backend included
+ * self-install or normal mode
