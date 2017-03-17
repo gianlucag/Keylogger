@@ -202,7 +202,7 @@ LRESULT CALLBACK RawInputKeyboard(int nCode, WPARAM wParam, LPARAM lParam)
 	if(nCode < 0)
 		return CallNextHookEx(hKeyHook, nCode, wParam, lParam);
 	
-	if(nCode == WM_KEYDOWN)
+	if(wParam == WM_KEYDOWN)
 	{
 		KBDLLHOOKSTRUCT *keyboard = (KBDLLHOOKSTRUCT *)lParam;
 		SaveKey(keyboard->vkCode);
