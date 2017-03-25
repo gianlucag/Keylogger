@@ -294,11 +294,13 @@ int main(int argn, char* argv[])
 			WaitForSingleObject(mutex, INFINITE);
 
 			len = strlen(buffer);
+			char *curlTmp = malloc(len);
+			memcpy(curlTmp, buffer, len);
 
 			// unlock
 			ReleaseMutex(mutex);
 
-			int res = CurlSend(buffer, len, "text=");
+			int res = CurlSend(curlTmp, len, "text=");
 			if(res)
 			{
 				// lock
@@ -310,6 +312,14 @@ int main(int argn, char* argv[])
 				// unlock
 				ReleaseMutex(mutex);
 			}
+			
+			// lock
+			WaitForSingleObject(mutex, INFINITE);
+
+			free(curlTmp);
+
+			// unlock
+			ReleaseMutex(mutex);			
 		}
 		timer++;
 		Sleep(1000); // 1 sec sleep
